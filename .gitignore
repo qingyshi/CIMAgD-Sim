@@ -1,0 +1,12 @@
+# Local macOS and R session files
+.DS_Store
+.Rhistory
+.RData
+.Ruserdata
+.Rproj.user/
+
+# Generated simulation checkpoints and summaries
+results/
+results_smoke/
+simulation_summary/
+simulation_summary_smoke/

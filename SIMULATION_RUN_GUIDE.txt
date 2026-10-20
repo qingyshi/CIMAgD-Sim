@@ -1,0 +1,241 @@
+CIMAgD simulation running guide
+Updated for this repository layout: 20 October 2026
+
+1. FILES AND WORKING DIRECTORY
+
+The repository contains:
+
+  README.md
+  SIMULATION_RUN_GUIDE.txt
+  R/
+    simulation_common.R
+    simstudy_1trial_binary_main.R
+    simstudy_5trial_binary_main.R
+    simstudy_1trial_continuous_add.R
+    simstudy_5trial_binary_small_add.R
+    summary_results.R
+
+Keep simulation_common.R beside the four drivers when copying the code to
+another device. The drivers share its parameter definitions and estimators.
+The CIMAgD R package is installed separately; this repository contains the
+simulation scripts.
+
+All terminal commands below assume the repository root is the working
+directory: the folder containing README.md and R/. Drivers locate
+simulation_common.R relative to their own file location. Relative output
+paths, however, are resolved from the working directory, not from R/.
+Quote paths containing spaces, for example --out="/path/to/my results".
+
+Sourcing a driver in R defines its setting, scenario table, and functions
+without starting a simulation:
+
+  source("R/simstudy_1trial_binary_main.R")
+  scenarios
+
+2. DEPENDENCIES AND INSTALLATION
+
+Use R >= 4.1 and a compatible CIMAgD package source version.
+
+  Single-trial simulations: CIMAgD
+  Five-trial simulations:   CIMAgD, meta, metafor
+  Summary tables/figures:   ggplot2, patchwork
+
+The summary script produces tables and figures together, so both plotting
+packages are required even if only the tables are needed. Parallel execution
+uses the parallel package included with R.
+
+Install the dependencies once in an R session with internet access:
+
+  install.packages(c("Matrix", "quadprog", "meta", "metafor",
+                     "ggplot2", "patchwork"),
+                   repos = "https://cloud.r-project.org")
+
+Matrix and quadprog are dependencies of CIMAgD. Obtain the CIMAgD source
+version associated with these simulations, then install it in R (replace the
+example path with the actual source directory containing DESCRIPTION):
+
+  install.packages("/absolute/path/to/CIMAgD", repos = NULL, type = "source")
+
+Package repository: https://github.com/qingyshi/CIMAgD
+
+Use the package implementation associated with the manuscript. An older
+installation may not support the CIMA() arguments used by these drivers.
+The drivers check for required packages and key interface arguments before
+running. If an old-interface error appears, install the compatible source
+and restart R. These checks do not establish that two package builds with
+the same version number contain identical code.
+
+For reproducibility, retain the exact package source revision or archive and
+use the same R and package versions across devices. The scripts record
+versions and session information, but this repository does not pin an R
+package environment.
+
+3. SMALL WORKFLOW CHECK
+
+From the repository root:
+
+  Rscript R/simstudy_1trial_binary_main.R
+
+Without options, each driver runs 2 replications of scenarios 1 and 16,
+serially, using master seed 20261019. Results are written to:
+
+  results_smoke/1trial_binary_main/scenario_01.rds
+  results_smoke/1trial_binary_main/scenario_16.rds
+
+The other three drivers have the same defaults. To check their workflows:
+
+  Rscript R/simstudy_5trial_binary_main.R
+  Rscript R/simstudy_1trial_continuous_add.R
+  Rscript R/simstudy_5trial_binary_small_add.R
+
+Summarize the available smoke results:
+
+  Rscript R/summary_results.R --input=results_smoke --output=simulation_summary_smoke
+
+These small runs check the workflow; their summaries are not simulation-study
+results. The summary script marks incomplete or smaller runs in table captions
+and fit_messages.txt.
+
+4. FULL SIMULATIONS
+
+Each command below runs all 16 scenarios with 1000 replications per scenario:
+
+  Rscript R/simstudy_1trial_binary_main.R --full --workers=4
+  Rscript R/simstudy_5trial_binary_main.R --full --workers=4
+  Rscript R/simstudy_1trial_continuous_add.R --full --workers=4
+  Rscript R/simstudy_5trial_binary_small_add.R --full --workers=4
+
+Outputs are saved under results/<setting>/scenario_XX.rds. Choose a worker
+count appropriate for the available memory and processor capacity. Workers
+process replications within each scenario; scenarios run in sequence.
+
+The setting names accepted by the summary script are:
+
+  1trial_binary_main
+  5trial_binary_main
+  1trial_continuous_add
+  5trial_binary_small_add
+
+Each setting has 16 scenario indices matching the manuscript appendix.
+Inspect them by sourcing the relevant driver and printing scenarios.
+
+5. SIMULATION OPTIONS
+
+  --full                  Defaults to 1000 replications, all 16 scenarios,
+                          and output root results
+  --reps=2                Replications per selected scenario (1 to 100000)
+  --scenarios=1,8,16       Comma-separated scenario indices; also accepts all
+  --workers=1             Serial execution (default)
+  --seed=20261019         Master seed (default)
+  --out=/path/to/results  Output root; the setting subfolder is added
+  --overwrite             Replace existing selected scenario files
+  --help                  Display options without running simulations
+
+Explicit --reps, --scenarios, and --out values override the defaults selected
+by --full. Without --full, unspecified values remain the smoke defaults,
+even if --reps or --scenarios is changed. For example:
+
+  Rscript R/simstudy_5trial_binary_main.R --full --scenarios=1,8,16 --workers=4
+
+This runs 1000 replications for only scenarios 1, 8, and 16 and writes to
+results/5trial_binary_main/.
+
+PSOCK workers are supported on Windows, macOS, and Linux. Environments that
+prohibit local socket connections should use --workers=1. Workers are stopped
+when the run exits.
+
+6. CHECKPOINTS, RESTARTS, AND MULTIPLE DEVICES
+
+One RDS checkpoint is written after all replications of a scenario finish.
+There are no within-scenario checkpoints. An interrupted, unsaved scenario
+must be rerun from its first replication.
+
+If ANY selected scenario file already exists, the driver stops unless
+--overwrite is supplied. It does not automatically skip completed scenarios.
+To continue, select only the scenario indices whose files are missing.
+For example, if scenarios 1 through 8 have finished:
+
+  Rscript R/simstudy_5trial_binary_main.R --full --scenarios=9,10,11,12,13,14,15,16 --workers=4
+
+Use another --out directory to keep a separate run. --overwrite replaces
+whole selected scenario files; it does not append replications.
+
+When distributing work across devices, use disjoint scenario indices, the
+same scripts and package builds, the same replication count, and the same
+master seed. Collect the scenario_XX.rds files into the matching setting
+directory before summarizing. Replication seeds do not depend on the worker
+count or the order in which scenarios are selected.
+
+The summary script checks scenario definitions, recorded package versions,
+and the shared implementation checksum within each setting, and rejects
+duplicate replication records. It does not check that master seeds agree,
+so verify this before combining outputs. Splitting one scenario into
+replication batches is not supported by the command-line interface.
+
+7. SAVED RESULTS
+
+Each scenario file contains:
+
+  - The scenario table and selected data-generating parameters.
+  - The fixed population ATE, calculated by Gaussian quadrature.
+  - Per-replication estimates, standard errors, and normal 95% intervals.
+  - Success indicators, fitting errors, and warnings for every method.
+  - Realized target and trial sample-size summaries.
+  - Run options, replication seeds, package versions, the checksum of
+    simulation_common.R, and R session information.
+
+Large fitted model objects are not saved. Every attempted method fit has a
+row, including failures. Failed fits are never replaced or resimulated.
+Successful command completion does not imply every method fit succeeded;
+review the reported failure counts and saved fitting messages.
+
+8. SUMMARIZATION
+
+After the full simulations have finished:
+
+  Rscript R/summary_results.R --input=results --output=simulation_summary
+
+For one setting:
+
+  Rscript R/summary_results.R --input=results --output=simulation_summary --settings=1trial_binary_main
+
+--settings also accepts a comma-separated list or all (the default).
+--input must name the root containing the setting subdirectories, not one
+setting directory or an individual RDS file. --help displays usage.
+No simulations are rerun. Missing settings are skipped; if no results are
+found for any requested setting, the script stops with an error.
+
+The script creates a separate output folder for each available setting:
+
+  bias_variance.tex  Bias and empirical variance by scenario and method
+  coverage.tex       95% interval coverage among successful fits
+  fit_counts.tex     Successful and attempted fits; their difference is failures
+  mse_mae.tex        Mean squared error and mean absolute error
+  mcse.tex           Monte Carlo standard errors, one table per method
+  figure.pdf         Four-panel bias, variance, coverage, and MSE figure
+  figure.png         The same figure at 13 x 7 inches and 300 dpi
+  figure.eps         EPS version of the figure
+  summary.rds        Numeric summaries and scenario metadata
+  fit_messages.rds   Replication records with fitting errors or warnings
+  fit_messages.txt   Human-readable fitting messages
+
+Bias, variance, MSE, MAE, and coverage condition on successful fits.
+summary.rds additionally contains coverage_all: the proportion of ALL
+attempted fits that both succeed and cover the truth, with failures counted
+as uncovered. This measure is not included in coverage.tex.
+
+To inspect it in R:
+
+  saved <- readRDS("simulation_summary/1trial_binary_main/summary.rds")
+  saved$summary[, c("scenario", "method", "attempted", "successful",
+                    "failed", "coverage", "coverage_all")]
+
+Numeric coverage values are proportions; coverage tables show percentages.
+Generated LaTeX tables require booktabs and graphicx in the containing
+document. Creating the tables and figures does not require a TeX installation.
+
+Summarization overwrites its existing output files without an --overwrite
+option. Keep smoke summaries in simulation_summary_smoke and full summaries
+in simulation_summary. The default results and summary directories are
+ignored by Git; choose how to archive or publish them separately. Custom
+output directories are not automatically covered by those ignore rules.
